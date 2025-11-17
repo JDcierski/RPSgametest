@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rock Paper Scissors Swarm</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #ui {
+      padding: 8px 12px;
+      background: #222;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      border-bottom: 1px solid #333;
+    }
+    #ui span.label {
+      font-size: 0.9rem;
+      opacity: 0.8;
+    }
+    button {
+      border: 1px solid #444;
+      background: #333;
+      color: #eee;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.15s, transform 0.08s, border-color 0.15s;
+    }
+    button:hover {
+      background: #3d3d3d;
+    }
+    button:active {
+      transform: scale(0.97);
+    }
+    button.tool.selected {
+      border-color: #0af;
+      background: #1e3950;
+    }
+    #startBtn.running {
+      border-color: #3fa34d;
+      background: #214426;
+    }
+    #status {
+      margin-left: auto;
+      font-size: 0.9rem;
+      opacity: 0.9;
+      white-space: nowrap;
+    }
+    #gameCanvas {
+      flex: 1;
+      display: block;
+      background: radial-gradient(circle at center, #202020, #050505 60%);
+      cursor: crosshair;
+    }
+    @media (max-width: 600px) {
+      #status {
+        flex-basis: 100%;
+        margin-left: 0;
+        margin-top: 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <span class="label">Add:</span>
+    <button class="tool selected" data-type="rock">Rock</button>
+    <button class="tool" data-type="paper">Paper</button>
+    <button class="tool" data-type="scissors">Scissors</button>
+
+    <button id="startBtn">Start</button>
+    <button id="clearBtn">Clear</button>
+
+    <span id="status">Click in the arena to add pieces, then press Start.</span>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const uiBar = document.getElementById("ui");
+    const statusEl = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const toolButtons = document.querySelectorAll("button.tool");
+
+    let currentType = "rock";
+    let running = false;
+
+    const RADIUS = 12;
+    const SPEED = 1.4;
+    const FRICTION = 0.98;
+
+    const pieces = [];
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight - uiBar.offsetHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    function typeColor(type) {
+      if (type === "rock") return "#bbbbbb";
+      if (type === "paper") return "#ffeaa7";
+      if (type === "scissors") return "#ff7675";
+      return "#ffffff";
+    }
+
+    function beats(a, b) {
+      return (
+        (a === "rock" && b === "scissors") ||
+        (a === "paper" && b === "rock") ||
+        (a === "scissors" && b === "paper")
+      );
+    }
+
+    toolButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        toolButtons.forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        currentType = btn.getAttribute("data-type");
+      });
+    });
+
+    canvas.addEventListener("click", event => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      pieces.push({
+        x,
+        y,
+        vx: 0,
+        vy: 0,
+        type: currentType
+      });
+
+      if (!running) {
+        statusEl.textContent = `Pieces: ${pieces.length}. Press Start to run the simulation.`;
+      }
+    });
+
+    startBtn.addEventListener("click", () => {
+      if (pieces.length < 2) {
+        statusEl.textContent = "Add at least two pieces before starting.";
+        return;
+      }
+      running = !running;
+      if (running) {
+        startBtn.classList.add("running");
+        startBtn.textContent = "Pause";
+        statusEl.textContent = "Simulation running. Last type standing will win.";
+      } else {
+        startBtn.classList.remove("running");
+        startBtn.textContent = "Start";
+        statusEl.textContent = "Paused. You can add more pieces or press Start again.";
+      }
+    });
+
+    clearBtn.addEventListener("click", () => {
+      pieces.length = 0;
+      running = false;
+      startBtn.classList.remove("running");
+      startBtn.textContent = "Start";
+      statusEl.textContent = "Cleared. Click to add pieces, then press Start.";
+    });
+
+    function update() {
+      if (!running) return;
+
+      for (let i = 0; i < pieces.length; i++) {
+        const p = pieces[i];
+
+        let target = null;
+        let bestDistSq = Infinity;
+
+        for (let j = 0; j < pieces.length; j++) {
+          if (i === j) continue;
+          const other = pieces[j];
+          if (!beats(p.type, other.type)) continue;
+
+          const dx = other.x - p.x;
+          const dy = other.y - p.y;
+          const distSq = dx * dx + dy * dy;
+
+          if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            target = other;
+          }
+        }
+
+        if (target) {
+          const dx = target.x - p.x;
+          const dy = target.y - p.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const ux = dx / dist;
+          const uy = dy / dist;
+
+          p.vx += ux * SPEED;
+          p.vy += uy * SPEED;
+        }
+
+        p.vx *= FRICTION;
+        p.vy *= FRICTION;
+
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < RADIUS) {
+          p.x = RADIUS;
+          p.vx *= -0.6;
+        } else if (p.x > canvas.width - RADIUS) {
+          p.x = canvas.width - RADIUS;
+          p.vx *= -0.6;
+        }
+        if (p.y < RADIUS) {
+          p.y = RADIUS;
+          p.vy *= -0.6;
+        } else if (p.y > canvas.height - RADIUS) {
+          p.y = canvas.height - RADIUS;
+          p.vy *= -0.6;
+        }
+      }
+
+      for (let i = 0; i < pieces.length; i++) {
+        for (let j = i + 1; j < pieces.length; j++) {
+          const a = pieces[i];
+          const b = pieces[j];
+
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const minDist = RADIUS * 2;
+
+          if (dist > 0 && dist < minDist) {
+            if (beats(a.type, b.type)) {
+              b.type = a.type;
+            } else if (beats(b.type, a.type)) {
+              a.type = b.type;
+            }
+
+            const overlap = minDist - dist;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            a.x -= nx * overlap * 0.5;
+            a.y -= ny * overlap * 0.5;
+            b.x += nx * overlap * 0.5;
+            b.y += ny * overlap * 0.5;
+          }
+        }
+      }
+
+      if (pieces.length > 0) {
+        const firstType = pieces[0].type;
+        const allSame = pieces.every(p => p.type === firstType);
+
+        if (allSame) {
+          running = false;
+          startBtn.classList.remove("running");
+          startBtn.textContent = "Start";
+          const name = firstType.charAt(0).toUpperCase() + firstType.slice(1);
+          statusEl.textContent = `${name} wins. Add more pieces or press Start to try again.`;
+        }
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (const p of pieces) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = typeColor(p.type);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#000000aa";
+        ctx.stroke();
+
+        ctx.fillStyle = "#000";
+        ctx.font = "10px system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        let label = "?";
+        if (p.type === "rock") label = "R";
+        if (p.type === "paper") label = "P";
+        if (p.type === "scissors") label = "S";
+
+        ctx.fillText(label, p.x, p.y);
+      }
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    loop();
+  </script>
+</body>
+</html>
