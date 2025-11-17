@@ -45,7 +45,9 @@
     button:active {
       transform: scale(0.97);
     }
-    button.tool.selected {
+    button.tool.selected,
+    #attractBtn.selected,
+    #repelBtn.selected {
       border-color: #0af;
       background: #1e3950;
     }
@@ -84,6 +86,10 @@
     <button id="startBtn">Start</button>
     <button id="clearBtn">Clear</button>
 
+    <span class="label">Mouse:</span>
+    <button id="attractBtn">Attract</button>
+    <button id="repelBtn">Repel</button>
+
     <span id="status">Click in the arena to add pieces, then press Start.</span>
   </div>
 
@@ -97,15 +103,26 @@
     const startBtn = document.getElementById("startBtn");
     const clearBtn = document.getElementById("clearBtn");
     const toolButtons = document.querySelectorAll("button.tool");
+    const attractBtn = document.getElementById("attractBtn");
+    const repelBtn = document.getElementById("repelBtn");
 
     let currentType = "rock";
     let running = false;
 
     const RADIUS = 12;
-    const SPEED = .5;
+    const SPEED = 0.5;      // your slower speed
     const FRICTION = 0.98;
+    const MOUSE_FORCE = 0.25; // strength of mouse attract or repel
 
     const pieces = [];
+
+    // Mouse state
+    const mouse = {
+      x: 0,
+      y: 0,
+      inside: false
+    };
+    let mouseMode = "none"; // "none", "attract", or "repel"
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
@@ -135,6 +152,42 @@
         btn.classList.add("selected");
         currentType = btn.getAttribute("data-type");
       });
+    });
+
+    // Mouse mode buttons
+    function updateMouseModeButtons() {
+      attractBtn.classList.toggle("selected", mouseMode === "attract");
+      repelBtn.classList.toggle("selected", mouseMode === "repel");
+    }
+
+    attractBtn.addEventListener("click", () => {
+      if (mouseMode === "attract") {
+        mouseMode = "none";
+      } else {
+        mouseMode = "attract";
+      }
+      updateMouseModeButtons();
+    });
+
+    repelBtn.addEventListener("click", () => {
+      if (mouseMode === "repel") {
+        mouseMode = "none";
+      } else {
+        mouseMode = "repel";
+      }
+      updateMouseModeButtons();
+    });
+
+    // Mouse tracking over canvas
+    canvas.addEventListener("mousemove", event => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = event.clientX - rect.left;
+      mouse.y = event.clientY - rect.top;
+      mouse.inside = true;
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+      mouse.inside = false;
     });
 
     canvas.addEventListener("click", event => {
@@ -186,6 +239,7 @@
       for (let i = 0; i < pieces.length; i++) {
         const p = pieces[i];
 
+        // Normal chasing behavior
         let target = null;
         let bestDistSq = Infinity;
 
@@ -215,12 +269,32 @@
           p.vy += uy * SPEED;
         }
 
+        // Mouse attract or repel
+        if (mouse.inside && mouseMode !== "none") {
+          const dxm = mouse.x - p.x;
+          const dym = mouse.y - p.y;
+          const distM = Math.sqrt(dxm * dxm + dym * dym) || 1;
+          const uxM = dxm / distM;
+          const uyM = dym / distM;
+
+          if (mouseMode === "attract") {
+            p.vx += uxM * MOUSE_FORCE;
+            p.vy += uyM * MOUSE_FORCE;
+          } else if (mouseMode === "repel") {
+            p.vx -= uxM * MOUSE_FORCE;
+            p.vy -= uyM * MOUSE_FORCE;
+          }
+        }
+
+        // Apply friction
         p.vx *= FRICTION;
         p.vy *= FRICTION;
 
+        // Move
         p.x += p.vx;
         p.y += p.vy;
 
+        // Boundaries
         if (p.x < RADIUS) {
           p.x = RADIUS;
           p.vx *= -0.6;
@@ -237,6 +311,7 @@
         }
       }
 
+      // Collisions and conversions
       for (let i = 0; i < pieces.length; i++) {
         for (let j = i + 1; j < pieces.length; j++) {
           const a = pieces[i];
@@ -254,6 +329,7 @@
               a.type = b.type;
             }
 
+            // Push them apart a bit
             const overlap = minDist - dist;
             const nx = dx / dist;
             const ny = dy / dist;
@@ -265,6 +341,7 @@
         }
       }
 
+      // Win check
       if (pieces.length > 0) {
         const firstType = pieces[0].type;
         const allSame = pieces.every(p => p.type === firstType);
@@ -314,4 +391,3 @@
   </script>
 </body>
 </html>
-
