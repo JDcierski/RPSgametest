@@ -47,7 +47,8 @@
     }
     button.tool.selected,
     #attractBtn.selected,
-    #repelBtn.selected {
+    #repelBtn.selected,
+    #noneBtn.selected {
       border-color: #0af;
       background: #1e3950;
     }
@@ -70,8 +71,8 @@
     @media (max-width: 600px) {
       #status {
         flex-basis: 100%;
-        margin-left: 0;
-        margin-top: 4px;
+      margin-left: 0;
+      margin-top: 4px;
       }
     }
   </style>
@@ -90,6 +91,7 @@
     <span class="label">Mouse:</span>
     <button id="attractBtn">Attract</button>
     <button id="repelBtn">Repel</button>
+    <button id="noneBtn" class="selected">None</button>
 
     <span id="status">Click in the arena to add pieces, then press Run.</span>
   </div>
@@ -107,14 +109,17 @@
     const toolButtons = document.querySelectorAll("button.tool");
     const attractBtn = document.getElementById("attractBtn");
     const repelBtn = document.getElementById("repelBtn");
+    const noneBtn = document.getElementById("noneBtn");
 
     let currentType = "rock";
     let running = false;
 
     const RADIUS = 12;
-    const SPEED = 0.5;       // your slower speed
+    const SPEED = 0.5;
     const FRICTION = 0.98;
-    const MOUSE_FORCE = 0.9; // stronger mouse influence
+
+    const MOUSE_FORCE = 1.2;     // strong attract and repel
+    const MOUSE_RADIUS = 160;    // radius around mouse where it applies
 
     const pieces = [];
 
@@ -123,7 +128,7 @@
       y: 0,
       inside: false
     };
-    let mouseMode = "none"; // "none", "attract", "repel"
+    let mouseMode = "none";      // "none", "attract", "repel"
     let lastWinner = null;
 
     function resizeCanvas() {
@@ -159,23 +164,21 @@
     function updateMouseModeButtons() {
       attractBtn.classList.toggle("selected", mouseMode === "attract");
       repelBtn.classList.toggle("selected", mouseMode === "repel");
+      noneBtn.classList.toggle("selected", mouseMode === "none");
     }
 
     attractBtn.addEventListener("click", () => {
-      if (mouseMode === "attract") {
-        mouseMode = "none";
-      } else {
-        mouseMode = "attract";
-      }
+      mouseMode = "attract";
       updateMouseModeButtons();
     });
 
     repelBtn.addEventListener("click", () => {
-      if (mouseMode === "repel") {
-        mouseMode = "none";
-      } else {
-        mouseMode = "repel";
-      }
+      mouseMode = "repel";
+      updateMouseModeButtons();
+    });
+
+    noneBtn.addEventListener("click", () => {
+      mouseMode = "none";
       updateMouseModeButtons();
     });
 
@@ -271,15 +274,18 @@
           const dxm = mouse.x - p.x;
           const dym = mouse.y - p.y;
           const distM = Math.sqrt(dxm * dxm + dym * dym) || 1;
-          const uxM = dxm / distM;
-          const uyM = dym / distM;
 
-          if (mouseMode === "attract") {
-            p.vx += uxM * MOUSE_FORCE;
-            p.vy += uyM * MOUSE_FORCE;
-          } else if (mouseMode === "repel") {
-            p.vx -= uxM * MOUSE_FORCE;
-            p.vy -= uyM * MOUSE_FORCE;
+          if (distM <= MOUSE_RADIUS) {
+            const uxM = dxm / distM;
+            const uyM = dym / distM;
+
+            if (mouseMode === "attract") {
+              p.vx += uxM * MOUSE_FORCE;
+              p.vy += uyM * MOUSE_FORCE;
+            } else if (mouseMode === "repel") {
+              p.vx -= uxM * MOUSE_FORCE;
+              p.vy -= uyM * MOUSE_FORCE;
+            }
           }
         }
 
@@ -352,6 +358,14 @@
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+      if (mouse.inside && mouseMode !== "none") {
+        ctx.beginPath();
+        ctx.arc(mouse.x, mouse.y, MOUSE_RADIUS, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
       for (const p of pieces) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, RADIUS, 0, Math.PI * 2);
@@ -381,6 +395,9 @@
       requestAnimationFrame(loop);
     }
     loop();
+
+    // make sure the initial mouse mode button state is correct
+    updateMouseModeButtons();
   </script>
 </body>
 </html>
