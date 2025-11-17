@@ -120,7 +120,9 @@
     let currentType = "rock";
     let running = false;
 
-    const RADIUS = 12;
+    const RADIUS = 12;          // physics radius, still used for collisions
+    const SPRITE_SIZE = 32;     // size of drawn images
+
     const SPEED = 0.4;
     const FRICTION = 0.98;
 
@@ -130,7 +132,6 @@
     const SAME_TYPE_RADIUS = 70;
     const SAME_TYPE_REPEL = 0.25;
 
-    // Detection radius and wandering
     const DETECTION_RADIUS = 220;
     const DETECTION_RADIUS_SQ = DETECTION_RADIUS * DETECTION_RADIUS;
     const WANDER_SPEED = 0.06;
@@ -145,6 +146,16 @@
     };
     let mouseMode = "none";
     let showVision = false;
+
+    // Load images for sprites
+    const sprites = {
+      rock: new Image(),
+      paper: new Image(),
+      scissors: new Image()
+    };
+    sprites.rock.src = "images/rock.png";
+    sprites.paper.src = "images/paper.png";
+    sprites.scissors.src = "images/scissor.png";
 
     function resizeCanvas() {
       if (!canvas || !uiBar) return;
@@ -266,8 +277,44 @@
       runBtn.classList.remove("running");
     });
 
+    function computeSpeedScales() {
+      // Count per type
+      let rockCount = 0;
+      let paperCount = 0;
+      let scissorsCount = 0;
+
+      for (const p of pieces) {
+        if (p.type === "rock") rockCount++;
+        else if (p.type === "paper") paperCount++;
+        else if (p.type === "scissors") scissorsCount++;
+      }
+
+      const arr = [
+        { type: "rock", count: rockCount },
+        { type: "paper", count: paperCount },
+        { type: "scissors", count: scissorsCount }
+      ];
+
+      // Sort descending by count
+      arr.sort((a, b) => b.count - a.count);
+
+      // Base scale 1 for all, then modify
+      const speedScale = { rock: 1, paper: 1, scissors: 1 };
+
+      // Rank 1 (most pieces) slowest
+      speedScale[arr[0].type] = 0.6;
+      // Rank 2 medium
+      speedScale[arr[1].type] = 0.9;
+      // Rank 3 fastest
+      speedScale[arr[2].type] = 1.3;
+
+      return speedScale;
+    }
+
     function update() {
       if (!running) return;
+
+      const speedScale = computeSpeedScales();
 
       // 1. Chasing, wandering, and mouse forces
       for (let i = 0; i < pieces.length; i++) {
@@ -292,6 +339,8 @@
           }
         }
 
+        const typeScale = speedScale[p.type] || 1;
+
         if (target) {
           // Chase target
           const dx = target.x - p.x;
@@ -300,16 +349,18 @@
           const ux = dx / dist;
           const uy = dy / dist;
 
-          p.vx += ux * SPEED;
-          p.vy += uy * SPEED;
+          const chaseSpeed = SPEED * typeScale;
+          p.vx += ux * chaseSpeed;
+          p.vy += uy * chaseSpeed;
         } else {
           // No target in range, wander
           p.wanderAngle += (Math.random() - 0.5) * WANDER_TURN_RATE;
-          p.vx += Math.cos(p.wanderAngle) * WANDER_SPEED;
-          p.vy += Math.sin(p.wanderAngle) * WANDER_SPEED;
+          const wanderSpeed = WANDER_SPEED * typeScale;
+          p.vx += Math.cos(p.wanderAngle) * wanderSpeed;
+          p.vy += Math.sin(p.wanderAngle) * wanderSpeed;
         }
 
-        // Mouse forces
+        // Mouse forces (not scaled by ranking so mouse stays powerful)
         if (mouse.inside && mouseMode !== "none") {
           const dxm = mouse.x - p.x;
           const dym = mouse.y - p.y;
@@ -441,6 +492,24 @@
       }
     }
 
+    function drawPieceSprite(p) {
+      const img = sprites[p.type];
+      if (img && img.complete && img.naturalWidth > 0) {
+        const size = SPRITE_SIZE;
+        const half = size / 2;
+        ctx.drawImage(img, p.x - half, p.y - half, size, size);
+      } else {
+        // Fallback circle if image not loaded
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = typeColor(p.type);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#000000aa";
+        ctx.stroke();
+      }
+    }
+
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -461,25 +530,7 @@
           ctx.stroke();
         }
 
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = typeColor(p.type);
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = "#000000aa";
-        ctx.stroke();
-
-        ctx.fillStyle = "#000";
-        ctx.font = "10px system-ui";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-
-        let label = "?";
-        if (p.type === "rock") label = "R";
-        if (p.type === "paper") label = "P";
-        if (p.type === "scissors") label = "S";
-
-        ctx.fillText(label, p.x, p.y);
+        drawPieceSprite(p);
       }
 
       updateStatus();
