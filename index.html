@@ -71,8 +71,8 @@
     @media (max-width: 600px) {
       #status {
         flex-basis: 100%;
-      margin-left: 0;
-      margin-top: 4px;
+        margin-left: 0;
+        margin-top: 4px;
       }
     }
   </style>
@@ -80,18 +80,19 @@
 <body>
   <div id="ui">
     <span class="label">Add:</span>
-    <button class="tool selected" data-type="rock">Rock</button>
-    <button class="tool" data-type="paper">Paper</button>
-    <button class="tool" data-type="scissors">Scissors</button>
+    <button class="tool selected" data-type="rock">Rock (R)</button>
+    <button class="tool" data-type="paper">Paper (P)</button>
+    <button class="tool" data-type="scissors">Scissors (Shift+S)</button>
+    <button class="tool" data-type="random">Random</button>
 
-    <button id="runBtn">Run</button>
-    <button id="stopBtn">Stop</button>
+    <button id="runBtn">Run (s)</button>
+    <button id="stopBtn">Stop (Z)</button>
     <button id="clearBtn">Clear</button>
 
     <span class="label">Mouse:</span>
-    <button id="attractBtn">Attract</button>
-    <button id="repelBtn">Repel</button>
-    <button id="noneBtn" class="selected">None</button>
+    <button id="attractBtn">Attract (A)</button>
+    <button id="repelBtn">Repel (D)</button>
+    <button id="noneBtn" class="selected">None (N)</button>
 
     <span id="status">Click in the arena to add pieces, then press Run.</span>
   </div>
@@ -118,8 +119,8 @@
     const SPEED = 0.5;
     const FRICTION = 0.98;
 
-    const MOUSE_FORCE = 1.2;     // strong attract and repel
-    const MOUSE_RADIUS = 160;    // radius around mouse where it applies
+    const MOUSE_FORCE = 1.2;
+    const MOUSE_RADIUS = 160;
 
     const pieces = [];
 
@@ -128,7 +129,7 @@
       y: 0,
       inside: false
     };
-    let mouseMode = "none";      // "none", "attract", "repel"
+    let mouseMode = "none";  // "none", "attract", "repel"
     let lastWinner = null;
 
     function resizeCanvas() {
@@ -153,11 +154,17 @@
       );
     }
 
+    function setTool(type) {
+      currentType = type;
+      toolButtons.forEach(b => {
+        b.classList.toggle("selected", b.getAttribute("data-type") === type);
+      });
+    }
+
     toolButtons.forEach(btn => {
       btn.addEventListener("click", () => {
-        toolButtons.forEach(b => b.classList.remove("selected"));
-        btn.classList.add("selected");
-        currentType = btn.getAttribute("data-type");
+        const type = btn.getAttribute("data-type");
+        setTool(type);
       });
     });
 
@@ -167,19 +174,21 @@
       noneBtn.classList.toggle("selected", mouseMode === "none");
     }
 
-    attractBtn.addEventListener("click", () => {
-      mouseMode = "attract";
+    function setMouseMode(mode) {
+      mouseMode = mode;
       updateMouseModeButtons();
+    }
+
+    attractBtn.addEventListener("click", () => {
+      setMouseMode("attract");
     });
 
     repelBtn.addEventListener("click", () => {
-      mouseMode = "repel";
-      updateMouseModeButtons();
+      setMouseMode("repel");
     });
 
     noneBtn.addEventListener("click", () => {
-      mouseMode = "none";
-      updateMouseModeButtons();
+      setMouseMode("none");
     });
 
     canvas.addEventListener("mousemove", event => {
@@ -198,12 +207,18 @@
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
 
+      let type = currentType;
+      if (type === "random") {
+        const options = ["rock", "paper", "scissors"];
+        type = options[Math.floor(Math.random() * options.length)];
+      }
+
       pieces.push({
         x,
         y,
         vx: 0,
         vy: 0,
-        type: currentType
+        type
       });
 
       if (!running) {
@@ -211,7 +226,7 @@
       }
     });
 
-    runBtn.addEventListener("click", () => {
+    function startSimulation() {
       if (pieces.length < 2) {
         statusEl.textContent = "Add at least two pieces before running.";
         return;
@@ -219,13 +234,17 @@
       running = true;
       runBtn.classList.add("running");
       statusEl.textContent = "Simulation running. Types can still win, but it will keep going.";
-    });
+    }
 
-    stopBtn.addEventListener("click", () => {
+    function stopSimulation() {
       running = false;
       runBtn.classList.remove("running");
       statusEl.textContent = "Stopped. You can add more pieces or press Run again.";
-    });
+    }
+
+    runBtn.addEventListener("click", startSimulation);
+
+    stopBtn.addEventListener("click", stopSimulation);
 
     clearBtn.addEventListener("click", () => {
       pieces.length = 0;
@@ -233,6 +252,34 @@
       runBtn.classList.remove("running");
       lastWinner = null;
       statusEl.textContent = "Cleared. Click to add pieces, then press Run.";
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener("keydown", event => {
+      const key = event.key;
+
+      // If in a text field, ignore
+      const tag = document.activeElement.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      if (key === "r" || key === "R") {
+        setTool("rock");
+      } else if (key === "p" || key === "P") {
+        setTool("paper");
+      } else if (key === "S") {
+        // Shift+S selects scissors
+        setTool("scissors");
+      } else if (key === "a" || key === "A") {
+        setMouseMode("attract");
+      } else if (key === "d" || key === "D") {
+        setMouseMode("repel");
+      } else if (key === "n" || key === "N") {
+        setMouseMode("none");
+      } else if (key === "s") {
+        startSimulation();
+      } else if (key === "z" || key === "Z") {
+        stopSimulation();
+      }
     });
 
     function update() {
@@ -385,19 +432,4 @@
         if (p.type === "paper") label = "P";
         if (p.type === "scissors") label = "S";
 
-        ctx.fillText(label, p.x, p.y);
-      }
-    }
-
-    function loop() {
-      update();
-      draw();
-      requestAnimationFrame(loop);
-    }
-    loop();
-
-    // make sure the initial mouse mode button state is correct
-    updateMouseModeButtons();
-  </script>
-</body>
-</html>
+        ctx.fillText(
