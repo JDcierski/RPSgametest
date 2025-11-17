@@ -120,8 +120,8 @@
     let currentType = "rock";
     let running = false;
 
-    const RADIUS = 12;          // physics radius, still used for collisions
-    const SPRITE_SIZE = 32;     // size of drawn images
+    const RADIUS = 12;          // physics radius
+    const SPRITE_SIZE = 32;     // drawn image size
 
     const SPEED = 0.4;
     const FRICTION = 0.98;
@@ -138,6 +138,7 @@
     const WANDER_TURN_RATE = 0.4;
 
     const pieces = [];
+    const explosions = []; // new
 
     const mouse = {
       x: 0,
@@ -147,7 +148,7 @@
     let mouseMode = "none";
     let showVision = false;
 
-    // Load images for sprites
+    // Load images
     const sprites = {
       rock: new Image(),
       paper: new Image(),
@@ -156,6 +157,9 @@
     sprites.rock.src = "images/rock.png";
     sprites.paper.src = "images/paper.png";
     sprites.scissors.src = "images/scissor.png";
+
+    const boomSprite = new Image();
+    boomSprite.src = "images/boom.png";
 
     function resizeCanvas() {
       if (!canvas || !uiBar) return;
@@ -273,12 +277,12 @@
 
     clearBtn.addEventListener("click", () => {
       pieces.length = 0;
+      explosions.length = 0;
       running = false;
       runBtn.classList.remove("running");
     });
 
     function computeSpeedScales() {
-      // Count per type
       let rockCount = 0;
       let paperCount = 0;
       let scissorsCount = 0;
@@ -295,18 +299,13 @@
         { type: "scissors", count: scissorsCount }
       ];
 
-      // Sort descending by count
       arr.sort((a, b) => b.count - a.count);
 
-      // Base scale 1 for all, then modify
       const speedScale = { rock: 1, paper: 1, scissors: 1 };
 
-      // Rank 1 (most pieces) slowest
-      speedScale[arr[0].type] = 0.6;
-      // Rank 2 medium
-      speedScale[arr[1].type] = 0.9;
-      // Rank 3 fastest
-      speedScale[arr[2].type] = 1.3;
+      speedScale[arr[0].type] = 0.6; // leader slowest
+      speedScale[arr[1].type] = 0.9; // second medium
+      speedScale[arr[2].type] = 1.3; // last fastest
 
       return speedScale;
     }
@@ -323,7 +322,6 @@
         let target = null;
         let bestDistSq = DETECTION_RADIUS_SQ;
 
-        // Look for a target only within detection radius
         for (let j = 0; j < pieces.length; j++) {
           if (i === j) continue;
           const other = pieces[j];
@@ -342,7 +340,6 @@
         const typeScale = speedScale[p.type] || 1;
 
         if (target) {
-          // Chase target
           const dx = target.x - p.x;
           const dy = target.y - p.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -353,14 +350,12 @@
           p.vx += ux * chaseSpeed;
           p.vy += uy * chaseSpeed;
         } else {
-          // No target in range, wander
           p.wanderAngle += (Math.random() - 0.5) * WANDER_TURN_RATE;
           const wanderSpeed = WANDER_SPEED * typeScale;
           p.vx += Math.cos(p.wanderAngle) * wanderSpeed;
           p.vy += Math.sin(p.wanderAngle) * wanderSpeed;
         }
 
-        // Mouse forces (not scaled by ranking so mouse stays powerful)
         if (mouse.inside && mouseMode !== "none") {
           const dxm = mouse.x - p.x;
           const dym = mouse.y - p.y;
@@ -431,7 +426,7 @@
         }
       }
 
-      // 4. Collisions and conversions
+      // 4. Collisions, conversions, explosions
       for (let i = 0; i < pieces.length; i++) {
         for (let j = i + 1; j < pieces.length; j++) {
           const a = pieces[i];
@@ -443,10 +438,23 @@
           const minDist = RADIUS * 2;
 
           if (dist > 0 && dist < minDist) {
+            let converted = false;
+
             if (beats(a.type, b.type)) {
               b.type = a.type;
+              converted = true;
             } else if (beats(b.type, a.type)) {
               a.type = b.type;
+              converted = true;
+            }
+
+            if (converted) {
+              explosions.push({
+                x: (a.x + b.x) / 2,
+                y: (a.y + b.y) / 2,
+                life: 0,
+                maxLife: 18
+              });
             }
 
             const overlap = minDist - dist;
@@ -457,6 +465,15 @@
             b.x += nx * overlap * 0.5;
             b.y += ny * overlap * 0.5;
           }
+        }
+      }
+
+      // 5. Update explosions
+      for (let i = explosions.length - 1; i >= 0; i--) {
+        const e = explosions[i];
+        e.life++;
+        if (e.life > e.maxLife) {
+          explosions.splice(i, 1);
         }
       }
     }
@@ -499,7 +516,6 @@
         const half = size / 2;
         ctx.drawImage(img, p.x - half, p.y - half, size, size);
       } else {
-        // Fallback circle if image not loaded
         ctx.beginPath();
         ctx.arc(p.x, p.y, RADIUS, 0, Math.PI * 2);
         ctx.fillStyle = typeColor(p.type);
@@ -507,6 +523,34 @@
         ctx.lineWidth = 2;
         ctx.strokeStyle = "#000000aa";
         ctx.stroke();
+      }
+    }
+
+    function drawExplosions() {
+      for (const e of explosions) {
+        const t = e.life / e.maxLife;
+        const alpha = 1 - t;
+        const size = 48 + 24 * t; // grows a bit while fading
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        if (boomSprite && boomSprite.complete && boomSprite.naturalWidth > 0) {
+          ctx.drawImage(
+            boomSprite,
+            e.x - size / 2,
+            e.y - size / 2,
+            size,
+            size
+          );
+        } else {
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, size / 2, 0, Math.PI * 2);
+          ctx.fillStyle = "orange";
+          ctx.fill();
+        }
+
+        ctx.restore();
       }
     }
 
@@ -521,17 +565,25 @@
         ctx.stroke();
       }
 
-      for (const p of pieces) {
-        if (showVision) {
+      if (showVision) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+        ctx.lineWidth = 1;
+        for (const p of pieces) {
           ctx.beginPath();
           ctx.arc(p.x, p.y, DETECTION_RADIUS, 0, Math.PI * 2);
-          ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-          ctx.lineWidth = 1;
           ctx.stroke();
         }
+        ctx.restore();
+      }
 
+      // First draw pieces
+      for (const p of pieces) {
         drawPieceSprite(p);
       }
+
+      // Then draw explosions on top
+      drawExplosions();
 
       updateStatus();
     }
