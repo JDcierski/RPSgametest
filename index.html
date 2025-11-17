@@ -80,19 +80,19 @@
 <body>
   <div id="ui">
     <span class="label">Add:</span>
-    <button class="tool selected" data-type="rock">Rock (R)</button>
-    <button class="tool" data-type="paper">Paper (P)</button>
-    <button class="tool" data-type="scissors">Scissors (Shift+S)</button>
+    <button class="tool selected" data-type="rock">Rock</button>
+    <button class="tool" data-type="paper">Paper</button>
+    <button class="tool" data-type="scissors">Scissors</button>
     <button class="tool" data-type="random">Random</button>
 
-    <button id="runBtn">Run (s)</button>
-    <button id="stopBtn">Stop (Z)</button>
+    <button id="runBtn">Run</button>
+    <button id="stopBtn">Stop</button>
     <button id="clearBtn">Clear</button>
 
     <span class="label">Mouse:</span>
-    <button id="attractBtn">Attract (A)</button>
-    <button id="repelBtn">Repel (D)</button>
-    <button id="noneBtn" class="selected">None (N)</button>
+    <button id="attractBtn">Attract</button>
+    <button id="repelBtn">Repel</button>
+    <button id="noneBtn" class="selected">None</button>
 
     <span id="status">Click in the arena to add pieces, then press Run.</span>
   </div>
@@ -119,8 +119,8 @@
     const SPEED = 0.5;
     const FRICTION = 0.98;
 
-    const MOUSE_FORCE = 1.2;
-    const MOUSE_RADIUS = 160;
+    const MOUSE_FORCE = 1.2;   // strength of attract or repel
+    const MOUSE_RADIUS = 160;  // distance around mouse where it applies
 
     const pieces = [];
 
@@ -129,7 +129,7 @@
       y: 0,
       inside: false
     };
-    let mouseMode = "none";  // "none", "attract", "repel"
+    let mouseMode = "none";    // "none", "attract", "repel"
     let lastWinner = null;
 
     function resizeCanvas() {
@@ -154,17 +154,11 @@
       );
     }
 
-    function setTool(type) {
-      currentType = type;
-      toolButtons.forEach(b => {
-        b.classList.toggle("selected", b.getAttribute("data-type") === type);
-      });
-    }
-
     toolButtons.forEach(btn => {
       btn.addEventListener("click", () => {
-        const type = btn.getAttribute("data-type");
-        setTool(type);
+        toolButtons.forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        currentType = btn.getAttribute("data-type");
       });
     });
 
@@ -174,21 +168,19 @@
       noneBtn.classList.toggle("selected", mouseMode === "none");
     }
 
-    function setMouseMode(mode) {
-      mouseMode = mode;
-      updateMouseModeButtons();
-    }
-
     attractBtn.addEventListener("click", () => {
-      setMouseMode("attract");
+      mouseMode = "attract";
+      updateMouseModeButtons();
     });
 
     repelBtn.addEventListener("click", () => {
-      setMouseMode("repel");
+      mouseMode = "repel";
+      updateMouseModeButtons();
     });
 
     noneBtn.addEventListener("click", () => {
-      setMouseMode("none");
+      mouseMode = "none";
+      updateMouseModeButtons();
     });
 
     canvas.addEventListener("mousemove", event => {
@@ -243,7 +235,6 @@
     }
 
     runBtn.addEventListener("click", startSimulation);
-
     stopBtn.addEventListener("click", stopSimulation);
 
     clearBtn.addEventListener("click", () => {
@@ -252,34 +243,6 @@
       runBtn.classList.remove("running");
       lastWinner = null;
       statusEl.textContent = "Cleared. Click to add pieces, then press Run.";
-    });
-
-    // Keyboard shortcuts
-    document.addEventListener("keydown", event => {
-      const key = event.key;
-
-      // If in a text field, ignore
-      const tag = document.activeElement.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-
-      if (key === "r" || key === "R") {
-        setTool("rock");
-      } else if (key === "p" || key === "P") {
-        setTool("paper");
-      } else if (key === "S") {
-        // Shift+S selects scissors
-        setTool("scissors");
-      } else if (key === "a" || key === "A") {
-        setMouseMode("attract");
-      } else if (key === "d" || key === "D") {
-        setMouseMode("repel");
-      } else if (key === "n" || key === "N") {
-        setMouseMode("none");
-      } else if (key === "s") {
-        startSimulation();
-      } else if (key === "z" || key === "Z") {
-        stopSimulation();
-      }
     });
 
     function update() {
@@ -432,4 +395,18 @@
         if (p.type === "paper") label = "P";
         if (p.type === "scissors") label = "S";
 
-        ctx.fillText(
+        ctx.fillText(label, p.x, p.y);
+      }
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    loop();
+
+    updateMouseModeButtons();
+  </script>
+</body>
+</html>
