@@ -94,7 +94,7 @@
     <button id="repelBtn">Repel</button>
     <button id="noneBtn" class="selected">None</button>
 
-    <span id="status">Click in the arena to add pieces, then press Run.</span>
+    <span id="status">No pieces. Click to add, then press Run.</span>
   </div>
 
   <canvas id="gameCanvas"></canvas>
@@ -119,8 +119,11 @@
     const SPEED = 0.5;
     const FRICTION = 0.98;
 
-    const MOUSE_FORCE = 1.2;   // strength of attract or repel
-    const MOUSE_RADIUS = 160;  // distance around mouse where it applies
+    const MOUSE_FORCE = 1.2;
+    const MOUSE_RADIUS = 160;
+
+    const SAME_TYPE_RADIUS = 70;
+    const SAME_TYPE_REPEL = 0.04;
 
     const pieces = [];
 
@@ -129,8 +132,7 @@
       y: 0,
       inside: false
     };
-    let mouseMode = "none";    // "none", "attract", "repel"
-    let lastWinner = null;
+    let mouseMode = "none";
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
@@ -212,26 +214,16 @@
         vy: 0,
         type
       });
-
-      if (!running) {
-        statusEl.textContent = `Pieces: ${pieces.length}. Press Run to start the simulation.`;
-      }
     });
 
     function startSimulation() {
-      if (pieces.length < 2) {
-        statusEl.textContent = "Add at least two pieces before running.";
-        return;
-      }
       running = true;
       runBtn.classList.add("running");
-      statusEl.textContent = "Simulation running. Types can still win, but it will keep going.";
     }
 
     function stopSimulation() {
       running = false;
       runBtn.classList.remove("running");
-      statusEl.textContent = "Stopped. You can add more pieces or press Run again.";
     }
 
     runBtn.addEventListener("click", startSimulation);
@@ -241,13 +233,12 @@
       pieces.length = 0;
       running = false;
       runBtn.classList.remove("running");
-      lastWinner = null;
-      statusEl.textContent = "Cleared. Click to add pieces, then press Run.";
     });
 
     function update() {
       if (!running) return;
 
+      // 1. Chasing and mouse forces
       for (let i = 0; i < pieces.length; i++) {
         const p = pieces[i];
 
@@ -298,6 +289,35 @@
             }
           }
         }
+      }
+
+      // 2. Mild repulsion between same type pieces
+      for (let i = 0; i < pieces.length; i++) {
+        for (let j = i + 1; j < pieces.length; j++) {
+          const a = pieces[i];
+          const b = pieces[j];
+          if (a.type !== b.type) continue;
+
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+          if (dist < SAME_TYPE_RADIUS) {
+            const ux = dx / dist;
+            const uy = dy / dist;
+            const force = (SAME_TYPE_RADIUS - dist) / SAME_TYPE_RADIUS * SAME_TYPE_REPEL;
+
+            a.vx -= ux * force;
+            a.vy -= uy * force;
+            b.vx += ux * force;
+            b.vy += uy * force;
+          }
+        }
+      }
+
+      // 3. Apply friction, move, and handle boundaries
+      for (let i = 0; i < pieces.length; i++) {
+        const p = pieces[i];
 
         p.vx *= FRICTION;
         p.vy *= FRICTION;
@@ -321,6 +341,7 @@
         }
       }
 
+      // 4. Collisions and conversions
       for (let i = 0; i < pieces.length; i++) {
         for (let j = i + 1; j < pieces.length; j++) {
           const a = pieces[i];
@@ -348,20 +369,36 @@
           }
         }
       }
+    }
 
-      if (pieces.length > 0) {
-        const firstType = pieces[0].type;
-        const allSame = pieces.every(p => p.type === firstType);
+    function updateStatus() {
+      if (pieces.length === 0) {
+        statusEl.textContent = "No pieces. Click to add, then press Run.";
+        return;
+      }
 
-        if (allSame) {
-          if (lastWinner !== firstType) {
-            const name = firstType.charAt(0).toUpperCase() + firstType.slice(1);
-            statusEl.textContent = `${name} currently dominates. Simulation keeps running.`;
-            lastWinner = firstType;
-          }
-        } else {
-          lastWinner = null;
-        }
+      let rockCount = 0;
+      let paperCount = 0;
+      let scissorsCount = 0;
+
+      for (const p of pieces) {
+        if (p.type === "rock") rockCount++;
+        else if (p.type === "paper") paperCount++;
+        else if (p.type === "scissors") scissorsCount++;
+      }
+
+      const maxCount = Math.max(rockCount, paperCount, scissorsCount);
+      const leaders = [];
+      if (rockCount === maxCount) leaders.push("Rock");
+      if (paperCount === maxCount) leaders.push("Paper");
+      if (scissorsCount === maxCount) leaders.push("Scissors");
+
+      if (leaders.length === 1) {
+        statusEl.textContent =
+          `Leader: ${leaders[0]} (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
+      } else {
+        statusEl.textContent =
+          `Tie (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
       }
     }
 
@@ -397,6 +434,8 @@
 
         ctx.fillText(label, p.x, p.y);
       }
+
+      updateStatus();
     }
 
     function loop() {
