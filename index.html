@@ -49,7 +49,9 @@
     #attractBtn.selected,
     #repelBtn.selected,
     #noneBtn.selected,
-    #visionBtn.selected {
+    #visionBtn.selected,
+    #convertBtn.selected,
+    #destroyBtn.selected {
       border-color: #0af;
       background: #1e3950;
     }
@@ -98,6 +100,10 @@
     <span class="label">Vision:</span>
     <button id="visionBtn">Show Range</button>
 
+    <span class="label">Mode:</span>
+    <button id="convertBtn" class="selected">Convert</button>
+    <button id="destroyBtn">Destroy</button>
+
     <span id="status">No pieces. Click to add, then press Run.</span>
   </div>
 
@@ -116,6 +122,8 @@
     const repelBtn = document.getElementById("repelBtn");
     const noneBtn = document.getElementById("noneBtn");
     const visionBtn = document.getElementById("visionBtn");
+    const convertBtn = document.getElementById("convertBtn");
+    const destroyBtn = document.getElementById("destroyBtn");
 
     let currentType = "rock";
     let running = false;
@@ -138,7 +146,7 @@
     const WANDER_TURN_RATE = 0.4;
 
     const pieces = [];
-    const explosions = []; // new
+    const explosions = [];
 
     const mouse = {
       x: 0,
@@ -147,6 +155,9 @@
     };
     let mouseMode = "none";
     let showVision = false;
+
+    // New: mode for combat
+    let combatMode = "convert"; // or "destroy"
 
     // Load images
     const sprites = {
@@ -228,6 +239,21 @@
       });
     }
 
+    function updateCombatModeButtons() {
+      convertBtn.classList.toggle("selected", combatMode === "convert");
+      destroyBtn.classList.toggle("selected", combatMode === "destroy");
+    }
+
+    convertBtn.addEventListener("click", () => {
+      combatMode = "convert";
+      updateCombatModeButtons();
+    });
+
+    destroyBtn.addEventListener("click", () => {
+      combatMode = "destroy";
+      updateCombatModeButtons();
+    });
+
     // Mouse tracking
     canvas.addEventListener("mousemove", event => {
       const rect = canvas.getBoundingClientRect();
@@ -258,7 +284,8 @@
         vx: 0,
         vy: 0,
         type,
-        wanderAngle: Math.random() * Math.PI * 2
+        wanderAngle: Math.random() * Math.PI * 2,
+        dead: false
       });
     });
 
@@ -318,6 +345,7 @@
       // 1. Chasing, wandering, and mouse forces
       for (let i = 0; i < pieces.length; i++) {
         const p = pieces[i];
+        if (p.dead) continue;
 
         let target = null;
         let bestDistSq = DETECTION_RADIUS_SQ;
@@ -325,6 +353,7 @@
         for (let j = 0; j < pieces.length; j++) {
           if (i === j) continue;
           const other = pieces[j];
+          if (other.dead) continue;
           if (!beats(p.type, other.type)) continue;
 
           const dx = other.x - p.x;
@@ -378,9 +407,11 @@
 
       // 2. Mild repulsion between same type pieces
       for (let i = 0; i < pieces.length; i++) {
+        const a = pieces[i];
+        if (a.dead) continue;
         for (let j = i + 1; j < pieces.length; j++) {
-          const a = pieces[i];
           const b = pieces[j];
+          if (b.dead) continue;
           if (a.type !== b.type) continue;
 
           const dx = b.x - a.x;
@@ -403,6 +434,7 @@
       // 3. Apply friction, move, and handle boundaries
       for (let i = 0; i < pieces.length; i++) {
         const p = pieces[i];
+        if (p.dead) continue;
 
         p.vx *= FRICTION;
         p.vy *= FRICTION;
@@ -426,11 +458,14 @@
         }
       }
 
-      // 4. Collisions, conversions, explosions
+      // 4. Collisions, conversions or destruction, explosions
       for (let i = 0; i < pieces.length; i++) {
+        const a = pieces[i];
+        if (a.dead) continue;
+
         for (let j = i + 1; j < pieces.length; j++) {
-          const a = pieces[i];
           const b = pieces[j];
+          if (b.dead) continue;
 
           const dx = b.x - a.x;
           const dy = b.y - a.y;
@@ -438,23 +473,37 @@
           const minDist = RADIUS * 2;
 
           if (dist > 0 && dist < minDist) {
+            let loser = null;
             let converted = false;
 
             if (beats(a.type, b.type)) {
-              b.type = a.type;
+              if (combatMode === "convert") {
+                b.type = a.type;
+              } else if (combatMode === "destroy") {
+                loser = b;
+              }
               converted = true;
             } else if (beats(b.type, a.type)) {
-              a.type = b.type;
+              if (combatMode === "convert") {
+                a.type = b.type;
+              } else if (combatMode === "destroy") {
+                loser = a;
+              }
               converted = true;
             }
 
             if (converted) {
+              const ex = (a.x + b.x) / 2;
+              const ey = (a.y + b.y) / 2;
               explosions.push({
-                x: (a.x + b.x) / 2,
-                y: (a.y + b.y) / 2,
+                x: ex,
+                y: ey,
                 life: 0,
                 maxLife: 18
               });
+              if (loser) {
+                loser.dead = true;
+              }
             }
 
             const overlap = minDist - dist;
@@ -465,6 +514,13 @@
             b.x += nx * overlap * 0.5;
             b.y += ny * overlap * 0.5;
           }
+        }
+      }
+
+      // Remove dead pieces
+      for (let i = pieces.length - 1; i >= 0; i--) {
+        if (pieces[i].dead) {
+          pieces.splice(i, 1);
         }
       }
 
@@ -500,12 +556,14 @@
       if (paperCount === maxCount) leaders.push("Paper");
       if (scissorsCount === maxCount) leaders.push("Scissors");
 
+      const modeLabel = combatMode === "convert" ? "Convert" : "Destroy";
+
       if (leaders.length === 1) {
         statusEl.textContent =
-          `Leader: ${leaders[0]} (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
+          `Mode: ${modeLabel} | Leader: ${leaders[0]} (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
       } else {
         statusEl.textContent =
-          `Tie (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
+          `Mode: ${modeLabel} | Tie (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
       }
     }
 
@@ -530,7 +588,7 @@
       for (const e of explosions) {
         const t = e.life / e.maxLife;
         const alpha = 1 - t;
-        const size = 48 + 24 * t; // grows a bit while fading
+        const size = 48 + 24 * t;
 
         ctx.save();
         ctx.globalAlpha = alpha;
@@ -577,14 +635,11 @@
         ctx.restore();
       }
 
-      // First draw pieces
       for (const p of pieces) {
         drawPieceSprite(p);
       }
 
-      // Then draw explosions on top
       drawExplosions();
-
       updateStatus();
     }
 
@@ -596,6 +651,7 @@
     loop();
 
     updateMouseModeButtons();
+    updateCombatModeButtons();
   </script>
 </body>
 </html>
