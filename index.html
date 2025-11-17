@@ -264,4 +264,225 @@
 
         let target = null;
         // Limit search to detection radius
-        let bestDistSq = DETECTIO
+        let bestDistSq = DETECTION_RADIUS_SQ;
+
+        for (let j = 0; j < pieces.length; j++) {
+          if (i === j) continue;
+          const other = pieces[j];
+          if (!beats(p.type, other.type)) continue;
+
+          const dx = other.x - p.x;
+          const dy = other.y - p.y;
+          const distSq = dx * dx + dy * dy;
+
+          if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            target = other;
+          }
+        }
+
+        if (target) {
+          // Chase target in range
+          const dx = target.x - p.x;
+          const dy = target.y - p.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const ux = dx / dist;
+          const uy = dy / dist;
+
+          p.vx += ux * SPEED;
+          p.vy += uy * SPEED;
+        } else {
+          // No target in range - wander
+          p.wanderAngle += (Math.random() - 0.5) * WANDER_TURN_RATE;
+          p.vx += Math.cos(p.wanderAngle) * WANDER_SPEED;
+          p.vy += Math.sin(p.wanderAngle) * WANDER_SPEED;
+        }
+
+        // Mouse forces
+        if (mouse.inside && mouseMode !== "none") {
+          const dxm = mouse.x - p.x;
+          const dym = mouse.y - p.y;
+          const distM = Math.sqrt(dxm * dxm + dym * dym) || 1;
+
+          if (distM <= MOUSE_RADIUS) {
+            const uxM = dxm / distM;
+            const uyM = dym / distM;
+
+            if (mouseMode === "attract") {
+              p.vx += uxM * MOUSE_FORCE;
+              p.vy += uyM * MOUSE_FORCE;
+            } else if (mouseMode === "repel") {
+              p.vx -= uxM * MOUSE_FORCE;
+              p.vy -= uyM * MOUSE_FORCE;
+            }
+          }
+        }
+      }
+
+      // 2. Mild repulsion between same type pieces
+      for (let i = 0; i < pieces.length; i++) {
+        for (let j = i + 1; j < pieces.length; j++) {
+          const a = pieces[i];
+          const b = pieces[j];
+          if (a.type !== b.type) continue;
+
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+          if (dist < SAME_TYPE_RADIUS) {
+            const ux = dx / dist;
+            const uy = dy / dist;
+            const force = (SAME_TYPE_RADIUS - dist) / SAME_TYPE_RADIUS * SAME_TYPE_REPEL;
+
+            a.vx -= ux * force;
+            a.vy -= uy * force;
+            b.vx += ux * force;
+            b.vy += uy * force;
+          }
+        }
+      }
+
+      // 3. Apply friction, move, and handle boundaries
+      for (let i = 0; i < pieces.length; i++) {
+        const p = pieces[i];
+
+        p.vx *= FRICTION;
+        p.vy *= FRICTION;
+
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < RADIUS) {
+          p.x = RADIUS;
+          p.vx *= -0.6;
+        } else if (p.x > canvas.width - RADIUS) {
+          p.x = canvas.width - RADIUS;
+          p.vx *= -0.6;
+        }
+        if (p.y < RADIUS) {
+          p.y = RADIUS;
+          p.vy *= -0.6;
+        } else if (p.y > canvas.height - RADIUS) {
+          p.y = canvas.height - RADIUS;
+          p.vy *= -0.6;
+        }
+      }
+
+      // 4. Collisions and conversions
+      for (let i = 0; i < pieces.length; i++) {
+        for (let j = i + 1; j < pieces.length; j++) {
+          const a = pieces[i];
+          const b = pieces[j];
+
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const minDist = RADIUS * 2;
+
+          if (dist > 0 && dist < minDist) {
+            if (beats(a.type, b.type)) {
+              b.type = a.type;
+            } else if (beats(b.type, a.type)) {
+              a.type = b.type;
+            }
+
+            const overlap = minDist - dist;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            a.x -= nx * overlap * 0.5;
+            a.y -= ny * overlap * 0.5;
+            b.x += nx * overlap * 0.5;
+            b.y += ny * overlap * 0.5;
+          }
+        }
+      }
+    }
+
+    function updateStatus() {
+      if (pieces.length === 0) {
+        statusEl.textContent = "No pieces. Click to add, then press Run.";
+        return;
+      }
+
+      let rockCount = 0;
+      let paperCount = 0;
+      let scissorsCount = 0;
+
+      for (const p of pieces) {
+        if (p.type === "rock") rockCount++;
+        else if (p.type === "paper") paperCount++;
+        else if (p.type === "scissors") scissorsCount++;
+      }
+
+      const maxCount = Math.max(rockCount, paperCount, scissorsCount);
+      const leaders = [];
+      if (rockCount === maxCount) leaders.push("Rock");
+      if (paperCount === maxCount) leaders.push("Paper");
+      if (scissorsCount === maxCount) leaders.push("Scissors");
+
+      if (leaders.length === 1) {
+        statusEl.textContent =
+          `Leader: ${leaders[0]} (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
+      } else {
+        statusEl.textContent =
+          `Tie (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (mouse.inside && mouseMode !== "none") {
+        ctx.beginPath();
+        ctx.arc(mouse.x, mouse.y, MOUSE_RADIUS, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      for (const p of pieces) {
+        // Optional vision radius per piece
+        if (showVision) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, DETECTION_RADIUS, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = typeColor(p.type);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#000000aa";
+        ctx.stroke();
+
+        ctx.fillStyle = "#000";
+        ctx.font = "10px system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        let label = "?";
+        if (p.type === "rock") label = "R";
+        if (p.type === "paper") label = "P";
+        if (p.type === "scissors") label = "S";
+
+        ctx.fillText(label, p.x, p.y);
+      }
+
+      updateStatus();
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    loop();
+
+    updateMouseModeButtons();
+  </script>
+</body>
+</html>
