@@ -71,11 +71,57 @@
       background: radial-gradient(circle at center, #202020, #050505 60%);
       cursor: crosshair;
     }
+    details#settingsDetails {
+      margin-left: 8px;
+      font-size: 0.85rem;
+      color: #ddd;
+    }
+    #settingsDetails summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #333;
+      user-select: none;
+    }
+    #settingsDetails[open] summary {
+      border-color: #0af;
+      background: #1e3950;
+    }
+    #settingsPanel {
+      margin-top: 6px;
+      padding: 8px;
+      background: #181818;
+      border-radius: 8px;
+      border: 1px solid #333;
+      max-width: 460px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+    .setting-row {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .setting-row label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      opacity: 0.9;
+    }
+    .setting-row input[type="range"] {
+      width: 100%;
+    }
     @media (max-width: 600px) {
       #status {
         flex-basis: 100%;
         margin-left: 0;
         margin-top: 4px;
+      }
+      #settingsPanel {
+        max-width: 100%;
       }
     }
   </style>
@@ -104,6 +150,83 @@
     <button id="convertBtn" class="selected">Convert</button>
     <button id="destroyBtn">Destroy</button>
 
+    <details id="settingsDetails">
+      <summary>Settings</summary>
+      <div id="settingsPanel">
+        <div class="setting-row">
+          <label>
+            <span>Chase speed</span>
+            <span id="chaseSpeedVal">0.40</span>
+          </label>
+          <input type="range" id="chaseSpeed" min="0" max="1.5" step="0.01" value="0.4">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            <span>Wander speed</span>
+            <span id="wanderSpeedVal">0.06</span>
+          </label>
+          <input type="range" id="wanderSpeed" min="0" max="0.4" step="0.01" value="0.06">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            <span>Sight radius</span>
+            <span id="sightRadiusVal">220</span>
+          </label>
+          <input type="range" id="sightRadius" min="50" max="400" step="5" value="220">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            <span>Threat radius</span>
+            <span id="threatRadiusVal">220</span>
+          </label>
+          <input type="range" id="threatRadius" min="50" max="400" step="5" value="220">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            <span>Flee speed</span>
+            <span id="fleeSpeedVal">0.25</span>
+          </label>
+          <input type="range" id="fleeSpeed" min="0" max="1" step="0.01" value="0.25">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            <span>Anti clump radius</span>
+            <span id="clumpRadiusVal">70</span>
+          </label>
+          <input type="range" id="clumpRadius" min="20" max="200" step="5" value="70">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            <span>Anti clump strength</span>
+            <span id="clumpForceVal">0.25</span>
+          </label>
+          <input type="range" id="clumpForce" min="0" max="1" step="0.01" value="0.25">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            <span>Alignment radius</span>
+            <span id="alignRadiusVal">150</span>
+          </label>
+          <input type="range" id="alignRadius" min="20" max="300" step="5" value="150">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            <span>Alignment force</span>
+            <span id="alignForceVal">0.08</span>
+          </label>
+          <input type="range" id="alignForce" min="0" max="0.5" step="0.01" value="0.08">
+        </div>
+      </div>
+    </details>
+
     <span id="status">No pieces. Click to add, then press Run.</span>
   </div>
 
@@ -125,36 +248,54 @@
     const convertBtn = document.getElementById("convertBtn");
     const destroyBtn = document.getElementById("destroyBtn");
 
+    // Settings inputs
+    const chaseSpeedInput = document.getElementById("chaseSpeed");
+    const chaseSpeedVal = document.getElementById("chaseSpeedVal");
+    const wanderSpeedInput = document.getElementById("wanderSpeed");
+    const wanderSpeedVal = document.getElementById("wanderSpeedVal");
+    const sightRadiusInput = document.getElementById("sightRadius");
+    const sightRadiusVal = document.getElementById("sightRadiusVal");
+    const threatRadiusInput = document.getElementById("threatRadius");
+    const threatRadiusVal = document.getElementById("threatRadiusVal");
+    const fleeSpeedInput = document.getElementById("fleeSpeed");
+    const fleeSpeedVal = document.getElementById("fleeSpeedVal");
+    const clumpRadiusInput = document.getElementById("clumpRadius");
+    const clumpRadiusVal = document.getElementById("clumpRadiusVal");
+    const clumpForceInput = document.getElementById("clumpForce");
+    const clumpForceVal = document.getElementById("clumpForceVal");
+    const alignRadiusInput = document.getElementById("alignRadius");
+    const alignRadiusVal = document.getElementById("alignRadiusVal");
+    const alignForceInput = document.getElementById("alignForce");
+    const alignForceVal = document.getElementById("alignForceVal");
+
     let currentType = "rock";
     let running = false;
 
     const RADIUS = 12;          // physics radius
     const SPRITE_SIZE = 32;     // drawn image size
 
-    const SPEED = 0.4;
+    // Tunable parameters (start at your previous values)
+    let SPEED = 0.4;
+    let WANDER_SPEED = 0.06;
+
+    let DETECTION_RADIUS = 220;
+    let DETECTION_RADIUS_SQ = DETECTION_RADIUS * DETECTION_RADIUS;
+
+    let THREAT_RADIUS = 220;
+    let THREAT_RADIUS_SQ = THREAT_RADIUS * THREAT_RADIUS;
+    let THREAT_FORCE = 0.25;
+
+    let SAME_TYPE_RADIUS = 70;
+    let SAME_TYPE_REPEL = 0.25;
+
+    let ALIGN_RADIUS = 150;
+    let ALIGN_RADIUS_SQ = ALIGN_RADIUS * ALIGN_RADIUS;
+    let ALIGN_FORCE = 0.08;
+
     const FRICTION = 0.98;
 
     const MOUSE_FORCE = 1.2;
     const MOUSE_RADIUS = 160;
-
-    const SAME_TYPE_RADIUS = 70;
-    const SAME_TYPE_REPEL = 0.25;
-
-    const DETECTION_RADIUS = 220;
-    const DETECTION_RADIUS_SQ = DETECTION_RADIUS * DETECTION_RADIUS;
-
-    const WANDER_SPEED = 0.06;
-    const WANDER_TURN_RATE = 0.4;
-
-    // Threat avoidance
-    const THREAT_RADIUS = 220;
-    const THREAT_RADIUS_SQ = THREAT_RADIUS * THREAT_RADIUS;
-    const THREAT_FORCE = 0.25; // less than SPEED so they do not outrun hunters
-
-    // Alignment with same type
-    const ALIGN_RADIUS = 150;
-    const ALIGN_RADIUS_SQ = ALIGN_RADIUS * ALIGN_RADIUS;
-    const ALIGN_FORCE = 0.08;
 
     // Explosion knockback
     const EXPLOSION_RADIUS = 90;
@@ -275,6 +416,37 @@
       combatMode = "destroy";
       updateCombatModeButtons();
     });
+
+    // Settings wiring
+    function hookSlider(input, label, onChange, formatter = v => v) {
+      if (!input || !label) return;
+      const apply = () => {
+        const value = parseFloat(input.value);
+        label.textContent = formatter(value);
+        onChange(value);
+      };
+      input.addEventListener("input", apply);
+      apply();
+    }
+
+    hookSlider(chaseSpeedInput, chaseSpeedVal, v => { SPEED = v; }, v => v.toFixed(2));
+    hookSlider(wanderSpeedInput, wanderSpeedVal, v => { WANDER_SPEED = v; }, v => v.toFixed(2));
+    hookSlider(sightRadiusInput, sightRadiusVal, v => {
+      DETECTION_RADIUS = v;
+      DETECTION_RADIUS_SQ = v * v;
+    }, v => v.toFixed(0));
+    hookSlider(threatRadiusInput, threatRadiusVal, v => {
+      THREAT_RADIUS = v;
+      THREAT_RADIUS_SQ = v * v;
+    }, v => v.toFixed(0));
+    hookSlider(fleeSpeedInput, fleeSpeedVal, v => { THREAT_FORCE = v; }, v => v.toFixed(2));
+    hookSlider(clumpRadiusInput, clumpRadiusVal, v => { SAME_TYPE_RADIUS = v; }, v => v.toFixed(0));
+    hookSlider(clumpForceInput, clumpForceVal, v => { SAME_TYPE_REPEL = v; }, v => v.toFixed(2));
+    hookSlider(alignRadiusInput, alignRadiusVal, v => {
+      ALIGN_RADIUS = v;
+      ALIGN_RADIUS_SQ = v * v;
+    }, v => v.toFixed(0));
+    hookSlider(alignForceInput, alignForceVal, v => { ALIGN_FORCE = v; }, v => v.toFixed(2));
 
     // Mouse tracking
     canvas.addEventListener("mousemove", event => {
@@ -520,7 +692,7 @@
           p.vx += ux * chaseSpeed;
           p.vy += uy * chaseSpeed;
         } else {
-          p.wanderAngle += (Math.random() - 0.5) * WANDER_TURN_RATE;
+          p.wanderAngle += (Math.random() - 0.5) * 0.4;
           const wanderSpeed = WANDER_SPEED * typeScale;
           p.vx += Math.cos(p.wanderAngle) * wanderSpeed;
           p.vy += Math.sin(p.wanderAngle) * wanderSpeed;
@@ -540,7 +712,7 @@
         }
 
         // Alignment with same type
-        if (alignCount > 0) {
+        if (alignCount > 0 && ALIGN_FORCE > 0) {
           const avgVx = alignVx / alignCount;
           const avgVy = alignVy / alignCount;
           p.vx += (avgVx - p.vx) * ALIGN_FORCE;
