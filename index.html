@@ -151,6 +151,11 @@
     const THREAT_RADIUS_SQ = THREAT_RADIUS * THREAT_RADIUS;
     const THREAT_FORCE = 0.25; // less than SPEED so they do not outrun hunters
 
+    // Alignment with same type
+    const ALIGN_RADIUS = 150;
+    const ALIGN_RADIUS_SQ = ALIGN_RADIUS * ALIGN_RADIUS;
+    const ALIGN_FORCE = 0.08;
+
     // Explosion knockback
     const EXPLOSION_RADIUS = 90;
     const KNOCKBACK_FORCE = 1.4;
@@ -440,8 +445,7 @@
 
     function update() {
       if (!running) {
-        // Game not running but we still want explosions to fade, etc.
-        // Explosion life update
+        // Game not running but we still want explosions to fade
         for (let i = explosions.length - 1; i >= 0; i--) {
           const e = explosions[i];
           e.life++;
@@ -454,7 +458,7 @@
 
       const speedScale = computeSpeedScales();
 
-      // 1. Chasing, fleeing, wandering, and mouse forces
+      // 1. Chasing, fleeing, alignment, wandering, and mouse forces
       for (let i = 0; i < pieces.length; i++) {
         const p = pieces[i];
         if (p.dead) continue;
@@ -464,6 +468,11 @@
 
         let threat = null;
         let bestThreatDistSq = THREAT_RADIUS_SQ;
+
+        // Alignment accumulators
+        let alignVx = 0;
+        let alignVy = 0;
+        let alignCount = 0;
 
         for (let j = 0; j < pieces.length; j++) {
           if (i === j) continue;
@@ -488,6 +497,13 @@
               bestThreatDistSq = distSq;
               threat = other;
             }
+          }
+
+          // Same type alignment
+          if (other.type === p.type && distSq < ALIGN_RADIUS_SQ) {
+            alignVx += other.vx;
+            alignVy += other.vy;
+            alignCount++;
           }
         }
 
@@ -521,6 +537,14 @@
           const fleeSpeed = THREAT_FORCE * typeScale;
           p.vx += ux * fleeSpeed;
           p.vy += uy * fleeSpeed;
+        }
+
+        // Alignment with same type
+        if (alignCount > 0) {
+          const avgVx = alignVx / alignCount;
+          const avgVy = alignVy / alignCount;
+          p.vx += (avgVx - p.vx) * ALIGN_FORCE;
+          p.vy += (avgVy - p.vy) * ALIGN_FORCE;
         }
 
         // Mouse forces
@@ -684,7 +708,7 @@
           winnerType.charAt(0).toUpperCase() + winnerType.slice(1);
         const modeLabel = combatMode === "convert" ? "Convert" : "Destroy";
         statusEl.textContent =
-          `Mode: ${modeLabel} | ${name} wins this wave. Press Run for a new wave.`;
+          `${name} wins this wave. Press Run for a new wave.`;
         return;
       }
 
@@ -713,10 +737,10 @@
 
       if (leaders.length === 1) {
         statusEl.textContent =
-          `Mode: ${modeLabel} | Leader: ${leaders[0]} (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
+          `Leader: ${leaders[0]} (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
       } else {
         statusEl.textContent =
-          `Mode: ${modeLabel} | Tie (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
+          `Tie (R:${rockCount} P:${paperCount} S:${scissorsCount})`;
       }
     }
 
